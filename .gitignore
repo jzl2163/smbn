@@ -1,0 +1,12 @@
+/target/
+/artifacts/
+/dist/
+*.user
+*.suo
+*.log
+.vs/
+.idea/
+.DS_Store
+engine/**/bin/
+engine/**/obj/
+config.local.json

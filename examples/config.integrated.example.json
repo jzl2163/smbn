@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "server": {
+    "netbios_name": "SMBN",
+    "workgroup": "WORKGROUP",
+    "authentication": "integrated_windows",
+    "enable_smb1": false,
+    "enable_smb2": true,
+    "enable_smb3": true,
+    "inactivity_timeout_seconds": 300,
+    "reject_remote_subnets": [],
+    "allow_remote_subnets": [
+      "192.168.0.0/16",
+      "10.0.0.0/8",
+      "fd00::/8"
+    ]
+  },
+  "listeners": [
+    {
+      "id": "direct-ipv4",
+      "address": "0.0.0.0",
+      "port": 445,
+      "transport": "direct_tcp",
+      "netbios_name_service": false,
+      "enabled": true
+    },
+    {
+      "id": "direct-ipv6",
+      "address": "::",
+      "port": 445,
+      "transport": "direct_tcp",
+      "netbios_name_service": false,
+      "enabled": false
+    }
+  ],
+  "shares": [
+    {
+      "id": "public-share",
+      "name": "Public",
+      "path": "C:\\SmbnShares\\Public",
+      "comment": "Example integrated-authentication share",
+      "enabled": true,
+      "hidden": false,
+      "read_only": false,
+      "read_access": [
+        "Users"
+      ],
+      "write_access": [
+        "Users"
+      ]
+    }
+  ],
+  "users": [],
+  "app": {
+    "start_with_windows": false,
+    "start_server_on_launch": false,
+    "minimize_to_tray": true,
+    "close_to_tray": true,
+    "light_mode": true,
+    "confirm_exit_while_running": true,
+    "language": "zh-CN"
+  },
+  "logging": {
+    "level": "information",
+    "max_file_mib": 8,
+    "retained_files": 4,
+    "gui_tail_lines": 500
+  }
+}
