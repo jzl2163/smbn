@@ -33,11 +33,13 @@ impl SmbnApp {
             engine: RefCell::new(engine),
             status: RefCell::new(EngineStatus::default()),
             sessions: RefCell::new(Vec::new()),
+            active_page: Cell::new(0),
             hidden: Cell::new(false),
             closing: Cell::new(false),
             tick: Cell::new(0),
         });
         app.load_config_into_controls();
+        app.show_page(0);
         crate::diagnostics::trace("ui_load_config_complete");
 
         let ui = SmbnUi {
@@ -87,15 +89,32 @@ impl SmbnApp {
         nwg::Label::builder().text("●  未运行").position((18, 12)).size((180, 26)).parent(&c.window).build(&mut c.header_state)?;
         nwg::Label::builder().text("正在读取引擎状态……").position((205, 12)).size((880, 26)).parent(&c.window).build(&mut c.header_detail)?;
         crate::diagnostics::trace("ui_headers_created");
-        nwg::TabsContainer::builder().position((14, 45)).size((1080, 650)).parent(&c.window).build(&mut c.tabs)?;
-        crate::diagnostics::trace("ui_tabs_container_created");
-        nwg::Tab::builder().text("服务器").parent(&c.tabs).build(&mut c.server_tab)?;
-        nwg::Tab::builder().text("监听器").parent(&c.tabs).build(&mut c.listeners_tab)?;
-        nwg::Tab::builder().text("共享").parent(&c.tabs).build(&mut c.shares_tab)?;
-        nwg::Tab::builder().text("用户").parent(&c.tabs).build(&mut c.users_tab)?;
-        nwg::Tab::builder().text("应用设置").parent(&c.tabs).build(&mut c.options_tab)?;
-        nwg::Tab::builder().text("监控与诊断").parent(&c.tabs).build(&mut c.monitor_tab)?;
-        crate::diagnostics::trace("ui_tabs_created");
+
+        let nav_y = 45;
+        let nav_w = 165;
+        let nav_h = 32;
+        nwg::Button::builder().text("服务器").position((14, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_server_button)?;
+        nwg::Button::builder().text("监听器").position((187, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_listeners_button)?;
+        nwg::Button::builder().text("共享").position((360, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_shares_button)?;
+        nwg::Button::builder().text("用户").position((533, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_users_button)?;
+        nwg::Button::builder().text("应用设置").position((706, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_options_button)?;
+        nwg::Button::builder().text("监控与诊断").position((879, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_monitor_button)?;
+        crate::diagnostics::trace("ui_navigation_created");
+
+        let page_position = (14, 82);
+        let page_size = (1080, 613);
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.server_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.listeners_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.shares_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.users_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.options_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.monitor_tab)?;
+        c.listeners_tab.set_visible(false);
+        c.shares_tab.set_visible(false);
+        c.users_tab.set_visible(false);
+        c.options_tab.set_visible(false);
+        c.monitor_tab.set_visible(false);
+        crate::diagnostics::trace("ui_page_frames_created");
 
         nwg::Button::builder().text("保存配置").position((15, 710)).size((115, 34)).parent(&c.window).build(&mut c.save_button)?;
         nwg::Button::builder().text("启动服务").position((140, 710)).size((115, 34)).parent(&c.window).build(&mut c.start_button)?;
