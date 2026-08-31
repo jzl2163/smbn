@@ -229,7 +229,9 @@ impl SmbnApp {
                 self.controls.diagnostics_box.set_text(&format_diagnostics(&result.checks));
                 self.set_footer(format!("诊断完成：{} 项", result.checks.len()));
             }
-            Err(error) => nwg::modal_error_message(&self.controls.window, "诊断失败", &error.to_string()),
+            Err(error) => {
+                nwg::modal_error_message(&self.controls.window, "诊断失败", &error.to_string());
+            }
         }
     }
 
