@@ -24,8 +24,14 @@ pub fn run() -> Result<()> {
     let config = config_store::load(&paths).context("读取配置失败")?;
     let start_minimized = env::args().any(|arg| arg.eq_ignore_ascii_case("--minimized"));
     let (engine, engine_error) = match EngineClient::launch(&paths) {
-        Ok(engine) => (Some(engine), None),
-        Err(error) => (None, Some(error.to_string())),
+        Ok(engine) => {
+            crate::diagnostics::trace("engine_launch_complete");
+            (Some(engine), None)
+        }
+        Err(error) => {
+            crate::diagnostics::trace("engine_launch_failed");
+            (None, Some(error.to_string()))
+        }
     };
 
     let ui = SmbnApp::build(paths, config, engine, start_minimized)?;
