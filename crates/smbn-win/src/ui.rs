@@ -24,14 +24,25 @@ pub fn run() -> Result<()> {
     let config = config_store::load(&paths).context("读取配置失败")?;
     let start_minimized = env::args().any(|arg| arg.eq_ignore_ascii_case("--minimized"));
     let (engine, engine_error) = match EngineClient::launch(&paths) {
-        Ok(engine) => (Some(engine), None),
-        Err(error) => (None, Some(error.to_string())),
+        Ok(engine) => {
+            crate::diagnostics::trace("engine_launch_complete");
+            (Some(engine), None)
+        }
+        Err(error) => {
+            crate::diagnostics::trace("engine_launch_failed");
+            (None, Some(error.to_string()))
+        }
     };
 
     let ui = SmbnApp::build(paths, config, engine, start_minimized)?;
     ui.inner.poll_status(true);
     if let Some(error) = engine_error {
-        ui.inner.set_footer(format!("引擎尚不可用：{error}"));
+        let status = format!("引擎启动失败：{error}");
+        ui.inner.set_footer(status.clone());
+        ui.inner.controls.header_detail.set_text(&status);
+        if !start_minimized {
+            nwg::modal_error_message(&ui.inner.controls.window, "SMB 引擎启动失败", &error);
+        }
     }
     if ui.inner.config.borrow().app.start_server_on_launch {
         ui.inner.start_server(false);
@@ -60,13 +71,18 @@ struct Controls {
 
     header_state: nwg::Label,
     header_detail: nwg::Label,
-    tabs: nwg::TabsContainer,
-    server_tab: nwg::Tab,
-    listeners_tab: nwg::Tab,
-    shares_tab: nwg::Tab,
-    users_tab: nwg::Tab,
-    options_tab: nwg::Tab,
-    monitor_tab: nwg::Tab,
+    nav_server_button: nwg::Button,
+    nav_listeners_button: nwg::Button,
+    nav_shares_button: nwg::Button,
+    nav_users_button: nwg::Button,
+    nav_options_button: nwg::Button,
+    nav_monitor_button: nwg::Button,
+    server_tab: nwg::Frame,
+    listeners_tab: nwg::Frame,
+    shares_tab: nwg::Frame,
+    users_tab: nwg::Frame,
+    options_tab: nwg::Frame,
+    monitor_tab: nwg::Frame,
 
     netbios_label: nwg::Label,
     netbios_input: nwg::TextInput,
@@ -175,6 +191,7 @@ struct SmbnApp {
     engine: RefCell<Option<EngineClient>>,
     status: RefCell<EngineStatus>,
     sessions: RefCell<Vec<SessionInfo>>,
+    active_page: Cell<usize>,
     hidden: Cell<bool>,
     closing: Cell<bool>,
     tick: Cell<u32>,

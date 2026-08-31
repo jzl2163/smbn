@@ -15,6 +15,13 @@ impl SmbnUi {
                 E::OnMenuItemSelected if handle == app.controls.tray_exit => app.request_exit(),
                 E::OnTimerTick if handle == app.controls.timer => app.poll_status(false),
 
+                E::OnButtonClick if handle == app.controls.nav_server_button => app.show_page(0),
+                E::OnButtonClick if handle == app.controls.nav_listeners_button => app.show_page(1),
+                E::OnButtonClick if handle == app.controls.nav_shares_button => app.show_page(2),
+                E::OnButtonClick if handle == app.controls.nav_users_button => app.show_page(3),
+                E::OnButtonClick if handle == app.controls.nav_options_button => app.show_page(4),
+                E::OnButtonClick if handle == app.controls.nav_monitor_button => app.show_page(5),
+
                 E::OnButtonClick if handle == app.controls.save_button => app.save_clicked(),
                 E::OnButtonClick if handle == app.controls.start_button => app.start_server(true),
                 E::OnButtonClick if handle == app.controls.stop_button => app.stop_server(true),

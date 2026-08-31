@@ -6,15 +6,25 @@ impl SmbnApp {
         start_minimized: bool,
     ) -> Result<SmbnUi> {
         let mut c = Controls::default();
+        crate::diagnostics::trace("ui_build_resources_begin");
         Self::build_resources(&mut c, &paths)?;
+        crate::diagnostics::trace("ui_build_resources_complete");
         Self::build_shell(&mut c, start_minimized)?;
+        crate::diagnostics::trace("ui_build_shell_complete");
         Self::build_server_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_server_tab_complete");
         Self::build_listeners_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_listeners_tab_complete");
         Self::build_shares_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_shares_tab_complete");
         Self::build_users_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_users_tab_complete");
         Self::build_options_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_options_tab_complete");
         Self::build_monitor_tab(&mut c)?;
+        crate::diagnostics::trace("ui_build_monitor_tab_complete");
         Self::configure_lists(&c);
+        crate::diagnostics::trace("ui_configure_lists_complete");
 
         let app = Rc::new(Self {
             controls: c,
@@ -23,14 +33,21 @@ impl SmbnApp {
             engine: RefCell::new(engine),
             status: RefCell::new(EngineStatus::default()),
             sessions: RefCell::new(Vec::new()),
+            active_page: Cell::new(0),
             hidden: Cell::new(false),
             closing: Cell::new(false),
             tick: Cell::new(0),
         });
         app.load_config_into_controls();
+        app.show_page(0);
+        crate::diagnostics::trace("ui_load_config_complete");
 
-        let ui = SmbnUi { inner: app, handlers: RefCell::new(Vec::new()) };
+        let ui = SmbnUi {
+            inner: app,
+            handlers: RefCell::new(Vec::new()),
+        };
         ui.bind_events();
+        crate::diagnostics::trace("ui_bind_events_complete");
         Ok(ui)
     }
 
@@ -55,6 +72,7 @@ impl SmbnApp {
             .title("SMBN - SMBLibrary 服务器管理器")
             .icon(Some(&c.app_icon))
             .build(&mut c.window)?;
+        crate::diagnostics::trace("ui_window_created");
 
         nwg::TrayNotification::builder()
             .parent(&c.window)
@@ -66,16 +84,37 @@ impl SmbnApp {
         nwg::MenuItem::builder().text("启动 SMB 服务").parent(&c.tray_menu).build(&mut c.tray_start)?;
         nwg::MenuItem::builder().text("停止 SMB 服务").parent(&c.tray_menu).build(&mut c.tray_stop)?;
         nwg::MenuItem::builder().text("退出").parent(&c.tray_menu).build(&mut c.tray_exit)?;
+        crate::diagnostics::trace("ui_tray_created");
 
         nwg::Label::builder().text("●  未运行").position((18, 12)).size((180, 26)).parent(&c.window).build(&mut c.header_state)?;
         nwg::Label::builder().text("正在读取引擎状态……").position((205, 12)).size((880, 26)).parent(&c.window).build(&mut c.header_detail)?;
-        nwg::TabsContainer::builder().position((14, 45)).size((1080, 650)).parent(&c.window).build(&mut c.tabs)?;
-        nwg::Tab::builder().text("服务器").parent(&c.tabs).build(&mut c.server_tab)?;
-        nwg::Tab::builder().text("监听器").parent(&c.tabs).build(&mut c.listeners_tab)?;
-        nwg::Tab::builder().text("共享").parent(&c.tabs).build(&mut c.shares_tab)?;
-        nwg::Tab::builder().text("用户").parent(&c.tabs).build(&mut c.users_tab)?;
-        nwg::Tab::builder().text("应用设置").parent(&c.tabs).build(&mut c.options_tab)?;
-        nwg::Tab::builder().text("监控与诊断").parent(&c.tabs).build(&mut c.monitor_tab)?;
+        crate::diagnostics::trace("ui_headers_created");
+
+        let nav_y = 45;
+        let nav_w = 165;
+        let nav_h = 32;
+        nwg::Button::builder().text("服务器").position((14, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_server_button)?;
+        nwg::Button::builder().text("监听器").position((187, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_listeners_button)?;
+        nwg::Button::builder().text("共享").position((360, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_shares_button)?;
+        nwg::Button::builder().text("用户").position((533, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_users_button)?;
+        nwg::Button::builder().text("应用设置").position((706, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_options_button)?;
+        nwg::Button::builder().text("监控与诊断").position((879, nav_y)).size((nav_w, nav_h)).parent(&c.window).build(&mut c.nav_monitor_button)?;
+        crate::diagnostics::trace("ui_navigation_created");
+
+        let page_position = (14, 82);
+        let page_size = (1080, 613);
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.server_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.listeners_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.shares_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.users_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.options_tab)?;
+        nwg::Frame::builder().position(page_position).size(page_size).parent(&c.window).build(&mut c.monitor_tab)?;
+        c.listeners_tab.set_visible(false);
+        c.shares_tab.set_visible(false);
+        c.users_tab.set_visible(false);
+        c.options_tab.set_visible(false);
+        c.monitor_tab.set_visible(false);
+        crate::diagnostics::trace("ui_page_frames_created");
 
         nwg::Button::builder().text("保存配置").position((15, 710)).size((115, 34)).parent(&c.window).build(&mut c.save_button)?;
         nwg::Button::builder().text("启动服务").position((140, 710)).size((115, 34)).parent(&c.window).build(&mut c.start_button)?;
@@ -83,12 +122,14 @@ impl SmbnApp {
         nwg::Button::builder().text("隐藏到托盘").position((390, 710)).size((125, 34)).parent(&c.window).build(&mut c.hide_button)?;
         nwg::Button::builder().text("退出").position((525, 710)).size((90, 34)).parent(&c.window).build(&mut c.exit_button)?;
         nwg::Label::builder().text("就绪").position((630, 715)).size((455, 28)).parent(&c.window).build(&mut c.footer_status)?;
+        crate::diagnostics::trace("ui_shell_footer_created");
 
         nwg::AnimationTimer::builder()
             .parent(&c.window)
             .interval(Duration::from_secs(1))
             .active(true)
             .build(&mut c.timer)?;
+        crate::diagnostics::trace("ui_timer_created");
         Ok(())
     }
 
@@ -140,5 +181,4 @@ impl SmbnApp {
             .position((25, 485)).size((995, 55)).parent(&c.listeners_tab).build(&mut c.listener_help)?;
         Ok(())
     }
-
 }
