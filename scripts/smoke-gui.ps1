@@ -17,9 +17,10 @@ if (-not (Test-Path $GuiExe)) {
 $Sandbox = Join-Path ([IO.Path]::GetTempPath()) "smbn-gui-smoke-$([Guid]::NewGuid().ToString('N'))"
 $OldLocalAppData = $env:LOCALAPPDATA
 $Process = $null
+$StartedAt = Get-Date
 
 function Write-SmokeDiagnostics {
-    param([string]$Root)
+    param([string]$Root, [DateTime]$Since)
     Write-Host '--- GUI smoke diagnostics ---'
     if (Test-Path $Root) {
         Get-ChildItem $Root -Recurse -File -ErrorAction SilentlyContinue |
@@ -29,12 +30,30 @@ function Write-SmokeDiagnostics {
                 try { Get-Content $_.FullName -ErrorAction Stop | Write-Host } catch { Write-Host "<unreadable: $($_.Exception.Message)>" }
             }
     }
+
+    Start-Sleep -Milliseconds 750
+    try {
+        $Events = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $Since } -ErrorAction Stop |
+            Where-Object {
+                ($_.ProviderName -eq 'Application Error' -or $_.ProviderName -eq 'Windows Error Reporting') -and
+                $_.Message -match 'smbn\.exe'
+            } |
+            Select-Object -First 6
+        foreach ($Event in $Events) {
+            Write-Host "### Windows event $($Event.Id) / $($Event.ProviderName)"
+            Write-Host $Event.Message
+        }
+    }
+    catch {
+        Write-Host "<unable to read Application crash events: $($_.Exception.Message)>"
+    }
     Write-Host '--- end diagnostics ---'
 }
 
 try {
     New-Item -ItemType Directory -Force -Path $Sandbox | Out-Null
     $env:LOCALAPPDATA = $Sandbox
+    $StartedAt = Get-Date
 
     $Process = Start-Process -FilePath $GuiExe -WorkingDirectory $PackageDirectory -PassThru
 
@@ -43,7 +62,7 @@ try {
         Start-Sleep -Milliseconds 250
         $Process.Refresh()
         if ($Process.HasExited) {
-            Write-SmokeDiagnostics $Sandbox
+            Write-SmokeDiagnostics $Sandbox $StartedAt
             throw "GUI exited during startup with code $($Process.ExitCode)."
         }
     }
@@ -51,7 +70,7 @@ try {
     $LogDirectory = Join-Path $Sandbox 'Smbn\logs'
     $BootstrapLog = Join-Path $LogDirectory 'engine-bootstrap.log'
     if (-not (Test-Path $BootstrapLog)) {
-        Write-SmokeDiagnostics $Sandbox
+        Write-SmokeDiagnostics $Sandbox $StartedAt
         throw "GUI stayed alive but did not launch the engine; expected bootstrap log: $BootstrapLog"
     }
 
