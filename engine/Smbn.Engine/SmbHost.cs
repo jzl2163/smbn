@@ -174,7 +174,7 @@ internal sealed class SmbHost : IDisposable
                     : 0,
                 ListenerCount = _listeners.Count,
                 ShareCount = _state == EngineState.Running ? _lastConfig?.Shares.Count(static item => item.Enabled) ?? 0 : 0,
-                UserCount = _state == EngineState.Running ? _lastConfig?.Users.Count(static item => item.Enabled) ?? 0 : 0,
+                UserCount = _state == EngineState.Running ? (_lastConfig?.Users.Count ?? 0) : 0,
                 SessionCount = sessions.Count,
                 OpenFileCount = sessions.Sum(static item => item.OpenFileCount),
                 LastError = _lastError,
@@ -317,7 +317,7 @@ internal sealed class SmbHost : IDisposable
         {
             AuthenticationMode.IntegratedWindows => new IntegratedNTLMAuthenticationProvider(),
             AuthenticationMode.Independent => new NamedIndependentAuthenticationProvider(
-                credentials?.GetPassword ?? throw new InvalidOperationException("Independent authentication has no credential store."),
+                (credentials ?? throw new InvalidOperationException("Independent authentication has no credential store.")).GetPassword,
                 config.Server.NetbiosName),
             _ => throw new ArgumentOutOfRangeException(nameof(config.Server.Authentication)),
         };
