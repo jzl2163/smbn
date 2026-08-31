@@ -131,6 +131,29 @@ impl SmbnApp {
         }
     }
 
+    fn show_page(&self, index: usize) {
+        let index = index.min(5);
+        self.active_page.set(index);
+
+        self.controls.server_tab.set_visible(index == 0);
+        self.controls.listeners_tab.set_visible(index == 1);
+        self.controls.shares_tab.set_visible(index == 2);
+        self.controls.users_tab.set_visible(index == 3);
+        self.controls.options_tab.set_visible(index == 4);
+        self.controls.monitor_tab.set_visible(index == 5);
+
+        self.controls.nav_server_button.set_enabled(index != 0);
+        self.controls.nav_listeners_button.set_enabled(index != 1);
+        self.controls.nav_shares_button.set_enabled(index != 2);
+        self.controls.nav_users_button.set_enabled(index != 3);
+        self.controls.nav_options_button.set_enabled(index != 4);
+        self.controls.nav_monitor_button.set_enabled(index != 5);
+
+        if index == 5 {
+            self.poll_status(true);
+        }
+    }
+
     fn poll_status(&self, force_heavy: bool) {
         let tick = self.tick.get().wrapping_add(1);
         self.tick.set(tick);
@@ -144,7 +167,7 @@ impl SmbnApp {
             Some(Ok(status)) => {
                 *self.status.borrow_mut() = status.clone();
                 self.render_status(&status);
-                if !hidden_light && (force_heavy || self.controls.tabs.selected_tab() == 5) {
+                if !hidden_light && (force_heavy || self.active_page.get() == 5) {
                     self.refresh_monitor_data();
                 }
             }
