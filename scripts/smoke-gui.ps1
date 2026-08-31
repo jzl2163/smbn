@@ -22,10 +22,12 @@ function Write-SmokeDiagnostics {
     param([string]$Root)
     Write-Host '--- GUI smoke diagnostics ---'
     if (Test-Path $Root) {
-        Get-ChildItem $Root -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-            Write-Host "### $($_.FullName)"
-            try { Get-Content $_.FullName -ErrorAction Stop | Write-Host } catch { Write-Host "<unreadable: $($_.Exception.Message)>" }
-        }
+        Get-ChildItem $Root -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension.ToLowerInvariant() -in @('.log', '.txt', '.json') } |
+            ForEach-Object {
+                Write-Host "### $($_.FullName)"
+                try { Get-Content $_.FullName -ErrorAction Stop | Write-Host } catch { Write-Host "<unreadable: $($_.Exception.Message)>" }
+            }
     }
     Write-Host '--- end diagnostics ---'
 }
