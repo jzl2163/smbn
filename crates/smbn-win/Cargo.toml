@@ -26,10 +26,10 @@ native-windows-gui = { workspace = true, features = [
     "animation-timer",
     "combobox",
     "cursor",
+    "frame",
     "high-dpi",
     "list-view",
     "menu",
-    "tabs",
     "textbox",
     "tray-notification",
 ] }
