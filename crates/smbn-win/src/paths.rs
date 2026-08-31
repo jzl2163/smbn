@@ -14,7 +14,10 @@ pub struct AppPaths {
 impl AppPaths {
     pub fn discover() -> io::Result<Self> {
         let exe = env::current_exe()?;
-        let exe_dir = exe.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+        let exe_dir = exe
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf();
         let portable = exe_dir.join("portable.flag").is_file();
         let data_dir = if portable {
             exe_dir.join("data")
@@ -26,6 +29,7 @@ impl AppPaths {
         };
         let log_dir = data_dir.join("logs");
         fs::create_dir_all(&log_dir)?;
+        crate::diagnostics::initialize(&log_dir);
         Ok(Self {
             exe_dir,
             config_file: data_dir.join("config.json"),
