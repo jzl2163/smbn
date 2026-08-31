@@ -5,6 +5,8 @@ mod autostart;
 #[cfg(windows)]
 mod config_store;
 #[cfg(windows)]
+mod diagnostics;
+#[cfg(windows)]
 mod dpapi;
 #[cfg(windows)]
 mod engine;
