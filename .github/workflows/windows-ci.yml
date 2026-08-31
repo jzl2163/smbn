@@ -41,6 +41,10 @@ jobs:
         shell: pwsh
         run: ./scripts/build.ps1 -CpuProfile baseline -SkipChecks
 
+      - name: GUI startup smoke test
+        shell: pwsh
+        run: ./scripts/smoke-gui.ps1 -PackageDirectory artifacts/package/smbn-baseline
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
