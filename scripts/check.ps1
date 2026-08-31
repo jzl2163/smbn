@@ -19,6 +19,10 @@ try {
     & cargo test -p smbn-core
     if ($LASTEXITCODE -ne 0) { throw 'cargo test failed' }
 
+    Write-Host '==> Rust Windows GUI tests'
+    & cargo test -p smbn-win --target x86_64-pc-windows-msvc
+    if ($LASTEXITCODE -ne 0) { throw 'cargo test for smbn-win failed' }
+
     Write-Host '==> Rust Windows target checks'
     & cargo check --workspace --all-targets --target x86_64-pc-windows-msvc
     if ($LASTEXITCODE -ne 0) { throw 'cargo check failed' }
