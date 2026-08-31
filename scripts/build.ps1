@@ -3,17 +3,23 @@ param(
     [ValidateSet('baseline', 'x86-64-v3', 'native')]
     [string]$CpuProfile = 'baseline',
     [switch]$SelfContained,
+    [switch]$FrameworkDependent,
     [switch]$SkipChecks
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+if ($SelfContained -and $FrameworkDependent) {
+    throw '-SelfContained and -FrameworkDependent cannot be used together.'
+}
+
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Target = 'x86_64-pc-windows-msvc'
 $EngineProject = Join-Path $Root 'engine\Smbn.Engine\Smbn.Engine.csproj'
 $Artifacts = Join-Path $Root 'artifacts'
-$Variant = if ($SelfContained) { "$CpuProfile-self-contained" } else { $CpuProfile }
+$UseSelfContained = -not $FrameworkDependent
+$Variant = if ($UseSelfContained) { $CpuProfile } else { "$CpuProfile-framework-dependent" }
 $Package = Join-Path $Artifacts "package\smbn-$Variant"
 $EngineOut = Join-Path $Artifacts "engine-$Variant"
 $CargoTarget = Join-Path $Artifacts "cargo-$Variant"
@@ -57,7 +63,7 @@ try {
     if (-not (Test-Path $GuiExe)) { throw "Missing GUI binary: $GuiExe" }
     Copy-Item $GuiExe (Join-Path $Package 'smbn.exe')
 
-    $SelfContainedValue = if ($SelfContained) { 'true' } else { 'false' }
+    $SelfContainedValue = $UseSelfContained.ToString().ToLowerInvariant()
     Write-Host "==> Publishing .NET engine (self-contained: $SelfContainedValue)"
     & dotnet publish $EngineProject -c Release -r win-x64 --self-contained $SelfContainedValue -p:PublishSingleFile=false -p:DebugType=None -p:DebugSymbols=false -o $EngineOut
     if ($LASTEXITCODE -ne 0) { throw '.NET publish failed' }
@@ -78,12 +84,17 @@ try {
     ) | Set-Content -Encoding UTF8 (Join-Path $Package 'BUILD-INFO.txt')
 
     Write-Host '==> Verifying package structure'
-    foreach ($Required in @(
+    $RequiredFiles = @(
         (Join-Path $Package 'smbn.exe'),
         (Join-Path $Package 'engine\Smbn.Engine.exe'),
         (Join-Path $Package 'README.zh-CN.md'),
         (Join-Path $Package 'THIRD_PARTY_NOTICES.md')
-    )) {
+    )
+    if ($UseSelfContained) {
+        $RequiredFiles += (Join-Path $Package 'engine\coreclr.dll')
+        $RequiredFiles += (Join-Path $Package 'engine\hostfxr.dll')
+    }
+    foreach ($Required in $RequiredFiles) {
         if (-not (Test-Path $Required)) { throw "Package is missing: $Required" }
     }
 
