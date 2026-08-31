@@ -37,7 +37,12 @@ pub fn run() -> Result<()> {
     let ui = SmbnApp::build(paths, config, engine, start_minimized)?;
     ui.inner.poll_status(true);
     if let Some(error) = engine_error {
-        ui.inner.set_footer(format!("引擎尚不可用：{error}"));
+        let status = format!("引擎启动失败：{error}");
+        ui.inner.set_footer(status.clone());
+        ui.inner.controls.header_detail.set_text(&status);
+        if !start_minimized {
+            nwg::modal_error_message(&ui.inner.controls.window, "SMB 引擎启动失败", &error);
+        }
     }
     if ui.inner.config.borrow().app.start_server_on_launch {
         ui.inner.start_server(false);
