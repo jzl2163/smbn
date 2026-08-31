@@ -33,3 +33,6 @@ native-windows-gui = { workspace = true, features = [
     "textbox",
     "tray-notification",
 ] }
+# native-windows-gui enables newline-converter for textbox support; pin its
+# unicode-segmentation dependency to the last release compatible with Rust 1.82.
+unicode-segmentation.workspace = true
