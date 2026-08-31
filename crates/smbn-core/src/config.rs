@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 pub const CURRENT_CONFIG_VERSION: u32 = 1;
 
@@ -250,10 +250,17 @@ impl Default for LogLevel {
 }
 
 /// Plaintext credentials only exist in memory while constructing one start request.
-#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlainUser {
     pub account_name: String,
     pub password: String,
+}
+
+impl Drop for PlainUser {
+    fn drop(&mut self) {
+        self.account_name.zeroize();
+        self.password.zeroize();
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -149,16 +149,20 @@ impl SmbnApp {
                 }
             }
             Some(Err(error)) => {
-                let mut status = EngineStatus::default();
-                status.state = EngineState::Faulted;
-                status.last_error = Some(error.to_string());
+                let status = EngineStatus {
+                    state: EngineState::Faulted,
+                    last_error: Some(error.to_string()),
+                    ..EngineStatus::default()
+                };
                 *self.status.borrow_mut() = status.clone();
                 self.render_status(&status);
             }
             None => {
-                let mut status = EngineStatus::default();
-                status.state = EngineState::Faulted;
-                status.last_error = Some("SMB 引擎尚未启动".to_owned());
+                let status = EngineStatus {
+                    state: EngineState::Faulted,
+                    last_error: Some("SMB 引擎尚未启动".to_owned()),
+                    ..EngineStatus::default()
+                };
                 *self.status.borrow_mut() = status.clone();
                 self.render_status(&status);
             }
@@ -229,7 +233,9 @@ impl SmbnApp {
                 self.controls.diagnostics_box.set_text(&format_diagnostics(&result.checks));
                 self.set_footer(format!("诊断完成：{} 项", result.checks.len()));
             }
-            Err(error) => nwg::modal_error_message(&self.controls.window, "诊断失败", &error.to_string()),
+            Err(error) => {
+                nwg::modal_error_message(&self.controls.window, "诊断失败", &error.to_string());
+            }
         }
     }
 

@@ -12,25 +12,35 @@ internal static class Program
             Directory.CreateDirectory(options.LogDirectory);
 
             using CancellationTokenSource lifetime = new();
-            Console.CancelKeyPress += (_, eventArgs) =>
+            ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
             {
                 eventArgs.Cancel = true;
                 lifetime.Cancel();
             };
-            AppDomain.CurrentDomain.ProcessExit += (_, _) => lifetime.Cancel();
+            EventHandler processExitHandler = (_, _) => lifetime.Cancel();
+            Console.CancelKeyPress += cancelHandler;
+            AppDomain.CurrentDomain.ProcessExit += processExitHandler;
 
-            Task? parentWatcher = options.ParentProcessId > 0
-                ? WatchParentAsync(options.ParentProcessId, lifetime)
-                : null;
-
-            await using EngineService service = new(options.PipeName, options.Token, options.LogDirectory);
-            await service.RunAsync(lifetime.Token).ConfigureAwait(false);
-            if (parentWatcher is not null)
+            try
             {
-                lifetime.Cancel();
-                await parentWatcher.ConfigureAwait(false);
+                Task? parentWatcher = options.ParentProcessId > 0
+                    ? WatchParentAsync(options.ParentProcessId, lifetime)
+                    : null;
+
+                await using EngineService service = new(options.PipeName, options.Token, options.LogDirectory);
+                await service.RunAsync(lifetime.Token).ConfigureAwait(false);
+                if (parentWatcher is not null)
+                {
+                    lifetime.Cancel();
+                    await parentWatcher.ConfigureAwait(false);
+                }
+                return 0;
             }
-            return 0;
+            finally
+            {
+                Console.CancelKeyPress -= cancelHandler;
+                AppDomain.CurrentDomain.ProcessExit -= processExitHandler;
+            }
         }
         catch (OperationCanceledException)
         {

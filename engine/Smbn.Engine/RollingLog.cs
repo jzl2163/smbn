@@ -103,7 +103,7 @@ internal sealed class RollingLog : IDisposable
         {
             while (await _fileQueue.Reader.WaitToReadAsync().ConfigureAwait(false))
             {
-                while (_fileQueue.Reader.TryRead(out string line))
+                while (_fileQueue.Reader.TryRead(out string? line))
                 {
                     try
                     {

@@ -122,8 +122,10 @@ mod tests {
         assert_eq!(serde_json::to_string(&Transport::DirectTcp).unwrap(), "\"direct_tcp\"");
         assert_eq!(serde_json::to_string(&LogLevel::Information).unwrap(), "\"information\"");
 
-        let mut server = ServerConfig::default();
-        server.authentication = AuthenticationMode::IntegratedWindows;
+        let server = ServerConfig {
+            authentication: AuthenticationMode::IntegratedWindows,
+            ..ServerConfig::default()
+        };
         let json = serde_json::to_value(server).unwrap();
         assert_eq!(json["authentication"], "integrated_windows");
 
