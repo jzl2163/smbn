@@ -223,6 +223,7 @@ mod tests {
     #[test]
     fn ipv6_netbios_is_rejected() {
         let mut config = AppConfig::default();
+        config.listeners[1].enabled = true;
         config.listeners[1].transport = Transport::NetbiosOverTcp;
         let issues = validate_config(&config);
         assert!(issues.iter().any(|i| i.path == "listeners[1].transport"));
