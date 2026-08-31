@@ -5,12 +5,13 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{json, Value};
 use smbn_core::{
-    DiagnosticsResult, EngineConfig, EngineStatus, LogTail, ResponseEnvelope,
-    SessionInfo, StartPayload, IPC_PROTOCOL_VERSION, MAX_IPC_MESSAGE_BYTES,
+    DiagnosticsResult, EngineConfig, EngineStatus, LogTail, ResponseEnvelope, SessionInfo,
+    StartPayload, IPC_PROTOCOL_VERSION, MAX_IPC_MESSAGE_BYTES,
 };
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::os::windows::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -22,6 +23,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const REQUEST_RETRY_DELAY: Duration = Duration::from_millis(40);
+const STARTUP_LOG_TAIL_BYTES: usize = 16 * 1024;
 
 pub struct EngineClient {
     pipe_path: String,
@@ -30,6 +32,7 @@ pub struct EngineClient {
     request_gate: Mutex<()>,
     child: Mutex<Child>,
     shutdown_sent: AtomicBool,
+    bootstrap_log_path: PathBuf,
 }
 
 impl EngineClient {
@@ -40,10 +43,13 @@ impl EngineClient {
                 paths.exe_dir.display()
             )
         })?;
-        let suffix = Alphanumeric.sample_string(&mut rand::rng(), 24).to_ascii_lowercase();
+        let suffix = Alphanumeric
+            .sample_string(&mut rand::rng(), 24)
+            .to_ascii_lowercase();
         let pipe_name = format!("smbn-{}-{suffix}", std::process::id());
         let pipe_path = format!(r"\\.\pipe\{pipe_name}");
         let token = Alphanumeric.sample_string(&mut rand::rng(), 64);
+        let bootstrap_log_path = paths.log_dir.join("engine-bootstrap.log");
 
         let mut command = match launch {
             EngineLaunch::Executable(path) => Command::new(path),
@@ -63,7 +69,7 @@ impl EngineClient {
             .env("SMBN_IPC_TOKEN", &token)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::from(bootstrap_log(paths)?))
+            .stderr(Stdio::from(bootstrap_log(&bootstrap_log_path)?))
             .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
         let child = command.spawn().context("无法启动 Smbn.Engine")?;
 
@@ -74,6 +80,7 @@ impl EngineClient {
             request_gate: Mutex::new(()),
             child: Mutex::new(child),
             shutdown_sent: AtomicBool::new(false),
+            bootstrap_log_path,
         };
         client.wait_until_ready()?;
         Ok(client)
@@ -128,20 +135,48 @@ impl EngineClient {
     }
 
     pub fn process_has_exited(&self) -> bool {
+        self.process_exit_status().is_some()
+    }
+
+    fn process_exit_status(&self) -> Option<std::process::ExitStatus> {
         self.child
             .lock()
             .ok()
             .and_then(|mut child| child.try_wait().ok())
             .flatten()
-            .is_some()
     }
 
     fn wait_until_ready(&self) -> Result<()> {
         let deadline = Instant::now() + STARTUP_TIMEOUT;
         let mut last_error = None;
         while Instant::now() < deadline {
-            if self.process_has_exited() {
-                bail!("SMB 引擎在初始化期间意外退出");
+            if let Some(status) = self.process_exit_status() {
+                let code = status
+                    .code()
+                    .map(|value| format!("{value} (0x{:08X})", value as u32))
+                    .unwrap_or_else(|| status.to_string());
+                let log_tail = read_bootstrap_log(&self.bootstrap_log_path);
+                let runtime_hint = if log_tail.contains("You must install or update .NET")
+                    || log_tail.contains("The framework 'Microsoft.NETCore.App'")
+                    || log_tail.contains("Failed to load hostfxr")
+                {
+                    "\n提示：此引擎包依赖系统 .NET 8 x64 Runtime。请改用自包含发布包，或安装匹配的 .NET 8 Runtime。"
+                } else {
+                    ""
+                };
+                if log_tail.is_empty() {
+                    bail!(
+                        "SMB 引擎在初始化期间意外退出（退出状态：{code}）。\n启动日志：{}{}",
+                        self.bootstrap_log_path.display(),
+                        runtime_hint
+                    );
+                }
+                bail!(
+                    "SMB 引擎在初始化期间意外退出（退出状态：{code}）。\n启动日志：{}\n{}{}",
+                    self.bootstrap_log_path.display(),
+                    log_tail,
+                    runtime_hint
+                );
             }
             match self.request::<_, Value>("ping", &json!({})) {
                 Ok(_) => return Ok(()),
@@ -152,8 +187,15 @@ impl EngineClient {
         Err(last_error.unwrap_or_else(|| anyhow!("等待 SMB 引擎命名管道超时")))
     }
 
-    fn request<P: Serialize + ?Sized, T: DeserializeOwned>(&self, command: &str, payload: &P) -> Result<T> {
-        let _guard = self.request_gate.lock().map_err(|_| anyhow!("IPC 请求锁已损坏"))?;
+    fn request<P: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        command: &str,
+        payload: &P,
+    ) -> Result<T> {
+        let _guard = self
+            .request_gate
+            .lock()
+            .map_err(|_| anyhow!("IPC 请求锁已损坏"))?;
         let id = self.request_id.fetch_add(1, Ordering::Relaxed);
         let envelope = BorrowedRequestEnvelope {
             version: IPC_PROTOCOL_VERSION,
@@ -184,7 +226,8 @@ impl EngineClient {
             bail!("IPC 响应长度 {length} 无效");
         }
         let mut response_bytes = vec![0u8; length];
-        pipe.read_exact(&mut response_bytes).context("读取 IPC 响应失败")?;
+        pipe.read_exact(&mut response_bytes)
+            .context("读取 IPC 响应失败")?;
         let response: ResponseEnvelope =
             serde_json::from_slice(&response_bytes).context("IPC 响应 JSON 无效")?;
         self.validate_response(id, &response)?;
@@ -194,7 +237,11 @@ impl EngineClient {
     fn open_pipe(&self) -> Result<File> {
         let deadline = Instant::now() + Duration::from_secs(3);
         loop {
-            match OpenOptions::new().read(true).write(true).open(&self.pipe_path) {
+            match OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&self.pipe_path)
+            {
                 Ok(file) => return Ok(file),
                 Err(error)
                     if (matches!(
@@ -205,7 +252,10 @@ impl EngineClient {
                 {
                     thread::sleep(REQUEST_RETRY_DELAY);
                 }
-                Err(error) => return Err(error).with_context(|| format!("无法连接命名管道 {}", self.pipe_path)),
+                Err(error) => {
+                    return Err(error)
+                        .with_context(|| format!("无法连接命名管道 {}", self.pipe_path))
+                }
             }
         }
     }
@@ -215,11 +265,23 @@ impl EngineClient {
             bail!("引擎 IPC 版本不匹配: {}", response.version);
         }
         if response.id != expected_id {
-            bail!("IPC 响应 ID 不匹配: 预期 {expected_id}，收到 {}", response.id);
+            bail!(
+                "IPC 响应 ID 不匹配: 预期 {expected_id}，收到 {}",
+                response.id
+            );
         }
         if !response.ok {
             if let Some(error) = &response.error {
-                bail!("{}: {}{}", error.code, error.message, error.detail.as_deref().map(|d| format!("\n{d}")).unwrap_or_default());
+                bail!(
+                    "{}: {}{}",
+                    error.code,
+                    error.message,
+                    error
+                        .detail
+                        .as_deref()
+                        .map(|detail| format!("\n{detail}"))
+                        .unwrap_or_default()
+                );
             }
             bail!("SMB 引擎返回未知错误");
         }
@@ -258,10 +320,19 @@ struct BorrowedRequestEnvelope<'a, P: ?Sized> {
     payload: &'a P,
 }
 
-fn bootstrap_log(paths: &AppPaths) -> Result<File> {
+fn bootstrap_log(path: &Path) -> Result<File> {
     OpenOptions::new()
         .create(true)
-        .append(true)
-        .open(paths.log_dir.join("engine-bootstrap.log"))
+        .write(true)
+        .truncate(true)
+        .open(path)
         .context("无法打开引擎启动日志")
+}
+
+fn read_bootstrap_log(path: &Path) -> String {
+    let Ok(bytes) = fs::read(path) else {
+        return String::new();
+    };
+    let start = bytes.len().saturating_sub(STARTUP_LOG_TAIL_BYTES);
+    String::from_utf8_lossy(&bytes[start..]).trim().to_owned()
 }
