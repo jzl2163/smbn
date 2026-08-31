@@ -149,16 +149,20 @@ impl SmbnApp {
                 }
             }
             Some(Err(error)) => {
-                let mut status = EngineStatus::default();
-                status.state = EngineState::Faulted;
-                status.last_error = Some(error.to_string());
+                let status = EngineStatus {
+                    state: EngineState::Faulted,
+                    last_error: Some(error.to_string()),
+                    ..EngineStatus::default()
+                };
                 *self.status.borrow_mut() = status.clone();
                 self.render_status(&status);
             }
             None => {
-                let mut status = EngineStatus::default();
-                status.state = EngineState::Faulted;
-                status.last_error = Some("SMB 引擎尚未启动".to_owned());
+                let status = EngineStatus {
+                    state: EngineState::Faulted,
+                    last_error: Some("SMB 引擎尚未启动".to_owned()),
+                    ..EngineStatus::default()
+                };
                 *self.status.borrow_mut() = status.clone();
                 self.render_status(&status);
             }
