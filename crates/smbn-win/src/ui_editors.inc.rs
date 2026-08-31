@@ -228,7 +228,7 @@ impl SmbnApp {
                 yes_no(item.enabled), item.account_name.as_str(), "已加密保存", item.id.as_str(),
             ]);
         }
-        self.controls.sessions_list.set_redraw(true);
+        self.controls.users_list.set_redraw(true);
     }
 
     fn refresh_session_list(&self) {
